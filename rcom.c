@@ -296,6 +296,45 @@ s2b(char *str)
 	int   n;
 
 	struct { char *spd_s; int spd_b; } sbv[] = {
+#if defined(B4000000)
+		{ "4000000", B4000000 },
+#endif
+#if defined(B3500000)
+		{ "3500000", B3500000 },
+#endif
+#if defined(B3000000)
+		{ "3000000", B3000000 },
+#endif
+#if defined(B2500000)
+		{ "2500000", B2500000 },
+#endif
+#if defined(B2000000)
+		{ "2000000", B2000000 },
+#endif
+#if defined(B1500000)
+		{ "1500000", B1500000 },
+#endif
+#if defined(B1152000)
+		{ "1152000", B1152000 },
+#endif
+#if defined(B1000000)
+		{ "1000000", B1000000 },
+#endif
+#if defined(B921600)
+		{ "921600", B921600 },
+#endif
+#if defined(B576000)
+		{ "576000", B576000 },
+#endif
+#if defined(B500000)
+		{ "500000", B500000 },
+#endif
+#if defined(B460800)
+		{ "460800", B460800 },
+#endif
+#if defined(B230400)
+		{ "230400", B230400 },
+#endif
 #if defined(B115200)
 		{ "115200", B115200 },
 #endif
@@ -397,6 +436,15 @@ com_open(char *line, int baud, int cflag)
 	mode = fcntl(fd, F_GETFL, 0);
 	if( (mode < 0) || (fcntl(fd, F_SETFL, mode & ~(O_NONBLOCK)) < 0) )
 		return(-1);
+
+	if (tcgetattr(fd, &tios) < 0)
+		return -1;
+	if (cfgetispeed(&tios) != baud) {
+		fprintf(stderr, "couldn't set input baudrate\n");
+	}
+	if (cfgetospeed(&tios) != baud) {
+		fprintf(stderr, "couldn't set output baudrate\n");
+	}
 
 	return(fd);
 }
