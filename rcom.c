@@ -38,7 +38,7 @@ static const char rcsid[] =
 #define PAR_ODD		(CS7 | PARENB | PARODD)
 
 #define DEF_PAR		PAR_NONE
-#define DEF_BAUD	B9600
+#define DEF_BAUD	B115200
 /* #define DEF_LINE	"/dev/modem" */
 #define DEF_CBRK	''
 
@@ -81,8 +81,9 @@ main(int argc, char *argv[])
 	par  = DEF_PAR;
 	hdx  = 0;
 	cflg = 0;
+	cflg |= CLOCAL;
 
-	while((c = getopt(argc, argv, "cehlovwtE:s:")) != EOF ) {
+	while((c = getopt(argc, argv, "cehlnovwtE:s:")) != EOF ) {
 		switch(c) {
 			case 'c':
 				cflg |= HUPCL;
@@ -100,7 +101,9 @@ main(int argc, char *argv[])
 				break;
 
 			case 'l':
-				cflg |= CLOCAL;
+				break;
+			case 'n':
+				cflg &= ~CLOCAL;
 				break;
 
 			case 'o':
@@ -237,6 +240,7 @@ loop(int comd, int hdx)
 
 	char   *buf;
 	int write_ts = 1;
+	int tty_is_interactive;
 
 
 	buf = (char *)malloc(BUF_SIZ);
@@ -246,7 +250,8 @@ loop(int comd, int hdx)
 	}
 
 	FD_ZERO(&afds);
-	if( !(isatty(STDIN_FILENO) && hdx) )
+	tty_is_interactive = isatty(STDIN_FILENO);
+	if( !(tty_is_interactive && hdx) )
 		FD_SET(STDIN_FILENO, &afds);
 	FD_SET(comd, &afds);
 
@@ -291,6 +296,12 @@ loop(int comd, int hdx)
 			}
 
 			else {
+				if (tty_is_interactive && n == 1 && buf[0] == '\x02') {
+					printf("<sending break>\r\n");
+					tcsendbreak(comd, 1);
+					continue;
+				}
+
 				if( write(comd, buf, n) < n ) {
 					perror("cannot write on device");
 					break;
@@ -435,16 +446,32 @@ tty_raw(int fd, int cbrk)
 	 */
 	tio = sio;
 
+#if 0
 	tio.c_lflag &= ~( ECHO | ICANON | IEXTEN );
 	tio.c_lflag |= ISIG;
 	tio.c_iflag &= ~( BRKINT | ICRNL | INPCK | ISTRIP | IXON );
+	//tio.c_iflag &= ~( BRKINT | INPCK | ISTRIP | IXON );
 	tio.c_cflag &= ~( CSIZE | PARENB );
 	tio.c_cflag |= CS8;
 	tio.c_oflag &= ~( OPOST );
+	tio.c_oflag |= ONLCR;
+#endif
+
+	/* raw mode */
+	tio.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+	tio.c_oflag &= ~OPOST;
+	tio.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+	tio.c_cflag &= ~(CSIZE | PARENB);
+	tio.c_cflag |= CS8;
+
+	tio.c_lflag |= ISIG; /* we want signals handled */
+	tio.c_iflag |= ICRNL; /* cr->nl */
+	tio.c_oflag |= OPOST; /* output post processing (nl -> cr nl) */
 
 	tio.c_cc[VMIN]  = 1;
 	tio.c_cc[VTIME] = 0;
-	tio.c_cc[VINTR] = cbrk;
+	/* don't override the ctrl-c */
+	//tio.c_cc[VINTR] = cbrk;
 
 	return
 		tcsetattr(fd, TCSAFLUSH, &tio);
@@ -477,9 +504,15 @@ com_open(char *line, int baud, int cflag)
 		return(-1);
 
 	tios.c_cflag = CREAD | cflag;
-	tios.c_iflag = IXON | IXOFF | IGNBRK | ISTRIP | IGNPAR;
+	tios.c_iflag = IGNBRK | IGNPAR;
+//	tios.c_iflag = IXON | IXOFF | IGNBRK | ISTRIP | IGNPAR;
 	tios.c_oflag = 0;
 	tios.c_lflag = 0;
+
+	// XXX new crap
+	tios.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+	tios.c_oflag &= ~OPOST;
+	tios.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
 
 	tios.c_cc[VMIN]  = 1;
 	tios.c_cc[VTIME] = 0;
@@ -530,13 +563,16 @@ usage(char *name)
 "options:\n"
 "	-c		hangup on close\n"
 "	-e		parity EVEN\n"
-"	-h		half-duplex mode\n"
-"	-l		ignore modem status lines (local)\n"
 "	-o		parity ODD\n"
+"	-h		half-duplex mode\n"
+"	-l		ignore modem status lines (local, default)\n"
+"	-n		use modem status lines\n"
 "	-v		display version informations\n"
 "	-E char		set escape character (default: ^X)\n"
-"	-s speed	set baud rate (default: 9600)\n"
+"	-s speed	set baud rate (default: 115200)\n"
 "	-t		print timestamps\n"
+"\n"
+"	ctrl+b		send a break signal\n"
 "\n"
 , name);
 	exit(EXIT_FAILURE);
