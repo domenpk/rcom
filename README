@@ -1,0 +1,27 @@
+rcom is a small tool which captures serial dumps.
+
+Compiled and tested under unix.
+
+How to use:
+
+Well, for capturing my null modem serial I use:
+
+rcom -l -s 115200 /dev/ttyS0
+
+Since version 1.2, 'tip' users can also use:
+
+rcom -l ttya115200
+
+Typing 'rcom' without arguments will print the
+options.
+
+homepage: http://zapek.meanmachine.ch/rcom/
+
+--
+Written mostly by pirus and a bit by me :)
+
+'tip' support by Ralph Schmidt
+
+Contact David Gerber <dg-rcom@zapek.com> for requests but we
+don't really plan to develop it any further.
+
