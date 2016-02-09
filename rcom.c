@@ -24,6 +24,7 @@
 
 #include<sys/types.h>
 #include<sys/time.h>
+#include <time.h>
  
 
 static const char rcsid[] =
@@ -61,6 +62,8 @@ static int    sigc;
 extern char *optarg;
 extern int   optind;
 
+static int timestamps;
+
 
 int
 main(int argc, char *argv[])
@@ -79,7 +82,7 @@ main(int argc, char *argv[])
 	hdx  = 0;
 	cflg = 0;
 
-	while((c = getopt(argc, argv, "cehlovwE:s:")) != EOF ) {
+	while((c = getopt(argc, argv, "cehlovwtE:s:")) != EOF ) {
 		switch(c) {
 			case 'c':
 				cflg |= HUPCL;
@@ -109,6 +112,10 @@ main(int argc, char *argv[])
 
 			case 'v':
 				copyright(name);
+				break;
+
+			case 't':
+				timestamps = 1;
 				break;
 
 			case 'E':
@@ -200,12 +207,36 @@ printf("  line: %s\n speed: %d\nparity: %d\n", line, baud, par);
 
 
 static int
+write_timestamp()
+{
+	char timestamp[20];
+	int len;
+	struct timeval tv;
+	static struct tm last;
+	struct tm now;
+
+	gettimeofday(&tv, NULL);
+	localtime_r(&tv.tv_sec, &now);
+	if (last.tm_mday != now.tm_mday || last.tm_mon != now.tm_mon
+			|| last.tm_year != now.tm_year) {
+		strftime(timestamp, 20, "%F", &now);
+		fprintf(stdout, "--- day changed to %s ---\n", timestamp);
+		fflush(stdout);
+		last = now;
+	}
+	len = strftime(timestamp, 20, "%T", &now);
+	len += snprintf(timestamp+len, 20-len, ".%03i: ", (int)tv.tv_usec/1000);
+	return write(STDOUT_FILENO, timestamp, len);
+}
+
+static int
 loop(int comd, int hdx)
 {
 	fd_set  afds, rfds;
 	int     n, nfd;
 
 	char   *buf;
+	int write_ts = 1;
 
 
 	buf = (char *)malloc(BUF_SIZ);
@@ -268,6 +299,7 @@ loop(int comd, int hdx)
 		}
 
 		if( FD_ISSET(comd, &rfds) ) {
+			char *pos1, *pos2;
 			n = read(comd, buf, BUF_SIZ);
 			if( n <= 0 ) {
 				if( n < 0 )
@@ -277,7 +309,32 @@ loop(int comd, int hdx)
 				break;
 			}
 
-			if( write(STDOUT_FILENO, buf, n) < n ) {
+			if (timestamps == 0) {
+				if (write(STDOUT_FILENO, buf, n) < n) {
+					fprintf(stderr, "cannot write on tty\n");
+					break;
+				}
+				continue;
+			}
+
+			if (write_ts) {
+				write_timestamp();
+				write_ts = 0;
+			}
+			pos1 = buf;
+			while ((pos2 = memchr(pos1, '\n', n-(pos1-buf)))) {
+				if (write(STDOUT_FILENO, pos1, pos2-pos1+1) < pos2-pos1+1)
+					fprintf(stderr, "cannot write on tty\n");
+
+				pos1 = pos2+1;
+				if (pos2 < buf+n-1) {
+					write_timestamp();
+				} else {
+					write_ts = 1;
+					break;
+				}
+			}
+			if (write(STDOUT_FILENO, pos1, n-(pos1-buf)) < n-(pos1-buf)) {
 				fprintf(stderr, "cannot write on tty\n");
 				break;
 			}
@@ -479,6 +536,7 @@ usage(char *name)
 "	-v		display version informations\n"
 "	-E char		set escape character (default: ^X)\n"
 "	-s speed	set baud rate (default: 9600)\n"
+"	-t		print timestamps\n"
 "\n"
 , name);
 	exit(EXIT_FAILURE);
