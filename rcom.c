@@ -150,7 +150,7 @@ main(int argc, char *argv[])
 	if (!strncmp(line,"tty",3) && line[3] && line[4])
 	{
 		/* my easy tip support */
-		sprintf(buf,"/dev/ttyS%ld",tolower(line[3])-'a');
+		sprintf(buf,"/dev/ttyS%d",tolower(line[3])-'a');
 
 		baud = s2b(&line[4]);
 		cflg |= CLOCAL;
